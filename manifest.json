@@ -1,0 +1,12 @@
+{
+  "display_name": "UU Modular Persona",
+  "loading_order": 25,
+  "requires": [],
+  "optional": [],
+  "generate_interceptor": "uuModularPersonaGenerateInterceptor",
+  "js": "index.js",
+  "css": "style.css",
+  "author": "verse0916",
+  "version": "1.0.0",
+  "homePage": "https://github.com/verse0916/SillyTavern-UU-Modular-Persona"
+}
