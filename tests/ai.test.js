@@ -7,7 +7,9 @@ import {
   getTemplateModules,
   mergeGeneratedItems,
   normalizeResult,
+  parseModelOutput,
   parseModuleDefinition,
+  parseNamedSections,
   requestPersonaModules,
   resolvePersonaInput,
   toPluginModules,
@@ -45,6 +47,8 @@ test("prompt keeps fact fidelity, selected cleaning rule, and extra instruction"
   assert.match(prompt, /不得推测年龄、背景、动机或关系/);
   assert.match(prompt, /删除明显重复内容/);
   assert.match(prompt, /保留讽刺原句/);
+  assert.match(prompt, /只输出一个合法 JSON 对象/);
+  assert.match(prompt, /"modules"/);
 });
 
 test("current and manually pasted Persona sources resolve without an internal Persona id", () => {
@@ -98,6 +102,70 @@ test("plain marker fallback is used when structured output is unavailable", asyn
   assert.equal(calls, 2);
   assert.equal(response.mode, "纯文本 fallback");
   assert.equal(response.modules[1].content, "说话总带一点讽刺。");
+});
+
+test("natural-language preface and Markdown module headings are parsed without a second request", async () => {
+  const modules = parseModuleDefinition("基本信息\n语言风格");
+  let calls = 0;
+  const response = await requestPersonaModules({
+    persona: "她是医生，说话总带一点讽刺。",
+    modules,
+    generateRaw: async () => {
+      calls += 1;
+      return [
+        "以下是对原始 Persona 的整理：",
+        "## 1. **基本信息**",
+        "她是医生。",
+        "## 2. **语言风格**",
+        "说话总带一点讽刺。",
+      ].join("\n");
+    },
+  });
+  assert.equal(calls, 1);
+  assert.match(response.mode, /标题文本兼容解析/);
+  assert.deepEqual(response.modules, [
+    { name: "基本信息", content: "她是医生。" },
+    { name: "语言风格", content: "说话总带一点讽刺。" },
+  ]);
+});
+
+test("loose section parsing accepts inline labels, wrapped headings, tables, and full-width markers", () => {
+  const modules = parseModuleDefinition("基本信息\n语言风格");
+  assert.deepEqual(parseNamedSections([
+    "**基本信息：** 她是医生。",
+    "【语言风格】",
+    "说话总带一点讽刺。",
+  ].join("\n"), modules).modules, [
+    { name: "基本信息", content: "她是医生。" },
+    { name: "语言风格", content: "说话总带一点讽刺。" },
+  ]);
+  assert.equal(parseModelOutput([
+    "@@MODULE：基本信息@@", "她是医生。", "@@END_MODULE@@",
+    "@@MODULE：语言风格@@", "带一点讽刺。", "@@END_MODULE@@",
+  ].join("\n"), modules).format, "标记文本");
+  assert.deepEqual(parseNamedSections([
+    "| 模块 | 内容 |",
+    "| --- | --- |",
+    "| 基本信息 | 她是医生。 |",
+    "| 语言风格 | 带一点讽刺。 |",
+  ].join("\n"), modules).modules, [
+    { name: "基本信息", content: "她是医生。" },
+    { name: "语言风格", content: "带一点讽刺。" },
+  ]);
+});
+
+test("JSON arrays and module-name maps are normalized as valid model output", () => {
+  const modules = parseModuleDefinition("基本信息\n语言风格");
+  const arrayResult = parseModelOutput(JSON.stringify([
+    { name: "基本信息", content: "她是医生。" },
+    { name: "语言风格", content: "带一点讽刺。" },
+  ]), modules);
+  assert.equal(arrayResult.format, "JSON");
+  const mapResult = parseModelOutput(JSON.stringify({
+    基本信息: "她是医生。",
+    语言风格: "带一点讽刺。",
+  }), modules);
+  assert.deepEqual(mapResult.modules, arrayResult.modules);
 });
 
 test("network failure does not issue a second request", async () => {

@@ -156,6 +156,17 @@ export function buildSystemPrompt({ modules, cleaningMode = "轻度", customProm
       "模块内容",
       "@@END_MODULE@@",
     );
+  } else {
+    const jsonSkeleton = JSON.stringify({
+      modules: modules.map((module) => ({ name: module.name, content: "" })),
+    });
+    sections.push(
+      "",
+      "输出格式：",
+      "只输出一个合法 JSON 对象，不要输出 Markdown 代码块、前言、解释或“以下是”等额外文字。",
+      "modules 数组中的模块名称、数量和顺序必须与下面的 JSON 骨架完全一致，只填写 content：",
+      jsonSkeleton,
+    );
   }
   return sections.join("\n");
 }
@@ -236,12 +247,113 @@ export function parsePlainBlocks(raw, modules) {
   const text = String(raw ?? "");
   return {
     modules: modules.map((module) => {
-      const pattern = new RegExp(`@@MODULE\\s*:\\s*${regexEscape(module.name)}\\s*@@([\\s\\S]*?)@@END_MODULE@@`);
+      const pattern = new RegExp(`@@MODULE\\s*[:：]\\s*${regexEscape(module.name)}\\s*@@([\\s\\S]*?)@@END_MODULE@@`, "i");
       const match = text.match(pattern);
       if (!match) throw new Error(`纯文本 fallback 缺少模块：${module.name}`);
       return { name: module.name, content: match[1].trim() };
     }),
   };
+}
+
+function cleanInlineContent(value) {
+  let text = String(value ?? "").trim().replace(/,$/, "").trim();
+  if ((text.startsWith('"') && text.endsWith('"')) || (text.startsWith("'") && text.endsWith("'"))) {
+    try {
+      return JSON.parse(text.startsWith("'") ? `"${text.slice(1, -1).replaceAll('"', '\\"')}"` : text);
+    } catch {
+      text = text.slice(1, -1);
+    }
+  }
+  return text;
+}
+
+function matchModuleHeading(line, moduleNames) {
+  const tableCells = String(line ?? "").trim().split("|").slice(1, -1).map((cell) => cell.trim());
+  if (tableCells.length >= 2 && moduleNames.includes(tableCells[0])) {
+    return { name: tableCells[0], inline: tableCells.slice(1).join(" | ") };
+  }
+
+  let text = String(line ?? "").trim();
+  text = text.replace(/^#{1,6}\s*/, "");
+  text = text.replace(/^[-+*]\s+/, "");
+  text = text.replaceAll("**", "").replaceAll("__", "");
+  text = text.replace(/^\d+\s*[.、)]\s*/, "");
+  text = text.replace(/^`|`$/g, "").trim();
+
+  const quoted = text.match(/^["'](.+?)["']\s*[:：]\s*(.*)$/);
+  if (quoted && moduleNames.includes(quoted[1].trim())) {
+    return { name: quoted[1].trim(), inline: cleanInlineContent(quoted[2]) };
+  }
+
+  const wrappers = [["【", "】"], ["[", "]"], ["「", "」"], ["『", "』"]];
+  for (const name of moduleNames) {
+    if (text === name) return { name, inline: "" };
+    const label = text.match(new RegExp(`^${regexEscape(name)}\\s*[:：]\\s*(.*)$`));
+    if (label) return { name, inline: cleanInlineContent(label[1]) };
+    for (const [open, close] of wrappers) {
+      const prefix = `${open}${name}${close}`;
+      if (!text.startsWith(prefix)) continue;
+      const rest = text.slice(prefix.length).replace(/^\s*[:：]?\s*/, "");
+      return { name, inline: cleanInlineContent(rest) };
+    }
+  }
+  return null;
+}
+
+export function parseNamedSections(raw, modules) {
+  const names = modules.map((module) => module.name);
+  const contentByName = new Map(names.map((name) => [name, []]));
+  let currentName = null;
+  let headingCount = 0;
+
+  for (const line of String(raw ?? "").split(/\r?\n/)) {
+    const heading = matchModuleHeading(line, names);
+    if (heading) {
+      currentName = heading.name;
+      headingCount += 1;
+      if (heading.inline) contentByName.get(currentName).push(heading.inline);
+      continue;
+    }
+    if (currentName) contentByName.get(currentName).push(line);
+  }
+
+  if (!headingCount) throw new Error("没有识别到以模块名称为标题的内容。");
+  return {
+    modules: names.map((name) => ({ name, content: contentByName.get(name).join("\n").trim() })),
+  };
+}
+
+function coerceJsonResult(data, modules) {
+  if (Array.isArray(data)) return { modules: data };
+  if (Array.isArray(data?.modules)) return data;
+  if (Array.isArray(data?.result?.modules)) return data.result;
+  if (data && typeof data === "object") {
+    const names = modules.map((module) => module.name);
+    if (names.some((name) => typeof data[name] === "string")) {
+      return { modules: names.map((name) => ({ name, content: String(data[name] ?? "") })) };
+    }
+  }
+  return data;
+}
+
+export function parseModelOutput(raw, modules) {
+  const errors = [];
+  try {
+    return { modules: normalizeResult(coerceJsonResult(parseJsonText(raw), modules), modules), format: "JSON" };
+  } catch (error) {
+    errors.push(`JSON：${errorText(error)}`);
+  }
+  try {
+    return { modules: normalizeResult(parsePlainBlocks(raw, modules), modules), format: "标记文本" };
+  } catch (error) {
+    errors.push(`标记文本：${errorText(error)}`);
+  }
+  try {
+    return { modules: normalizeResult(parseNamedSections(raw, modules), modules), format: "标题文本" };
+  } catch (error) {
+    errors.push(`标题文本：${errorText(error)}`);
+  }
+  throw new Error(errors.join("；"));
 }
 
 export function normalizeResult(data, modules) {
@@ -336,7 +448,8 @@ export async function requestPersonaModules({
       responseLength: 12_000,
       jsonSchema: responseSchema(modules),
     });
-    return { modules: normalizeResult(parseJsonText(raw), modules), mode: "结构化输出" };
+    const parsed = parseModelOutput(raw, modules);
+    return { modules: parsed.modules, mode: parsed.format === "JSON" ? "结构化输出" : `结构化请求 · ${parsed.format}兼容解析` };
   } catch (error) {
     if (isRequestFailure(error)) throw new Error(`AI 请求失败：${errorText(error)}`);
     errors.push(`结构化输出：${errorText(error)}`);
@@ -348,7 +461,8 @@ export async function requestPersonaModules({
       trimNames: false,
       responseLength: 12_000,
     });
-    return { modules: normalizeResult(parsePlainBlocks(raw, modules), modules), mode: "纯文本 fallback" };
+    const parsed = parseModelOutput(raw, modules);
+    return { modules: parsed.modules, mode: parsed.format === "标记文本" ? "纯文本 fallback" : `纯文本 fallback · ${parsed.format}兼容解析` };
   } catch (error) {
     if (isRequestFailure(error)) throw new Error(`AI 请求失败：${errorText(error)}`);
     errors.push(`纯文本 fallback：${errorText(error)}`);
