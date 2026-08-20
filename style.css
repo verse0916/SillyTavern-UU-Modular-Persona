@@ -103,8 +103,18 @@
 #uu-modular-persona-panel .uu-content,
 #uu-modular-persona-panel .uu-preview {
   width: 100%;
-  resize: vertical;
   box-sizing: border-box;
+}
+
+#uu-modular-persona-panel .uu-content {
+  min-height: 10rem;
+  max-height: 60vh;
+  overflow-y: auto;
+  resize: vertical;
+}
+
+#uu-modular-persona-panel .uu-preview {
+  resize: vertical;
 }
 
 #uu-modular-persona-panel .uu-module-list {

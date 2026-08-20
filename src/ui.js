@@ -66,7 +66,7 @@ function renderModule(item) {
   const content = el("textarea", "text_pole textarea_compact uu-content");
   content.value = item.content;
   content.dataset.field = "content";
-  content.rows = 5;
+  content.rows = 9;
   content.placeholder = "输入会追加到 Persona 描述后的内容……";
   body.append(content);
   row.append(head, body);
