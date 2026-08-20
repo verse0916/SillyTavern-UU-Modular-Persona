@@ -2,6 +2,7 @@ import { extension_settings } from "/scripts/extensions.js";
 import { saveSettingsDebounced } from "/script.js";
 import { user_avatar } from "/scripts/personas.js";
 import { buildPersonaText } from "./build.js";
+import { assertSamePersona, mergeGeneratedItems } from "./ai.js";
 
 export const EXTENSION_KEY = "uu_modular_persona";
 export const SCHEMA_VERSION = 1;
@@ -155,6 +156,21 @@ export function replaceCurrentItems(items) {
   if (!uu) return;
   uu.items = (Array.isArray(items) ? items : []).map(normalizeItem);
   saveSettings();
+}
+
+export function applyGeneratedModules(personaId, generatedItems, mode = "append") {
+  const id = String(personaId ?? "").trim();
+  if (!id) throw new Error("当前没有选择 Persona。");
+  assertSamePersona(id, getCurrentPersonaId());
+  const modules = (Array.isArray(generatedItems) ? generatedItems : [])
+    .filter((item) => item?.type === "module")
+    .map(normalizeModule);
+  mergeGeneratedItems([], modules, mode);
+  const uu = getUu(id);
+  if (!uu) throw new Error("无法读取当前 Persona 的 UU 数据。");
+  uu.items = mergeGeneratedItems(uu.items, modules, mode);
+  saveSettings();
+  return modules.length;
 }
 
 export function getPreview() {

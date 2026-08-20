@@ -25,6 +25,10 @@
   gap: 0.45rem;
 }
 
+#uu-modular-persona-panel .uu-ai-entry {
+  border-color: var(--SmartThemeQuoteColor);
+}
+
 #uu-modular-persona-panel .uu-master-toggle,
 #uu-modular-persona-panel .uu-separator-label {
   display: flex;
@@ -150,6 +154,192 @@
   background: color-mix(in srgb, var(--SmartThemeQuoteColor) 8%, transparent);
 }
 
+.uu-ai-dialog {
+  width: min(880px, calc(100vw - 2rem));
+  max-width: 880px;
+  max-height: min(90vh, 980px);
+  padding: 0;
+  color: var(--SmartThemeBodyColor);
+  background: var(--SmartThemeBlurTintColor);
+  border: 1px solid var(--SmartThemeBorderColor);
+  border-radius: 12px;
+  box-shadow: 0 18px 60px rgb(0 0 0 / 45%);
+}
+
+.uu-ai-dialog::backdrop {
+  background: rgb(0 0 0 / 62%);
+  backdrop-filter: blur(2px);
+}
+
+.uu-ai-shell {
+  display: flex;
+  flex-direction: column;
+  max-height: min(90vh, 980px);
+}
+
+.uu-ai-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1rem 1.1rem;
+  border-bottom: 1px solid var(--SmartThemeBorderColor);
+}
+
+.uu-ai-header h3,
+.uu-ai-header p,
+.uu-ai-results h4,
+.uu-ai-result-card h5 {
+  margin: 0;
+}
+
+.uu-ai-header p {
+  margin-top: 0.35rem;
+  opacity: 0.75;
+}
+
+.uu-ai-close {
+  flex: 0 0 auto;
+  min-width: 2.25rem;
+  margin: 0;
+}
+
+.uu-ai-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+  padding: 1rem 1.1rem 1.2rem;
+  overflow-y: auto;
+}
+
+.uu-ai-config {
+  display: flex;
+  flex-direction: column;
+  gap: 0.8rem;
+}
+
+.uu-ai-dialog fieldset {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.7rem 1rem;
+  margin: 0;
+  padding: 0.75rem;
+  border: 1px solid var(--SmartThemeBorderColor);
+  border-radius: 8px;
+}
+
+.uu-ai-dialog legend {
+  padding: 0 0.35rem;
+  font-weight: 700;
+}
+
+.uu-ai-dialog label {
+  line-height: 1.45;
+}
+
+.uu-ai-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.uu-ai-grid label,
+.uu-ai-custom-modules label,
+.uu-ai-config > label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.uu-ai-dialog select,
+.uu-ai-dialog textarea {
+  width: 100%;
+  box-sizing: border-box;
+  margin: 0;
+}
+
+.uu-ai-dialog textarea {
+  resize: vertical;
+}
+
+.uu-ai-manual {
+  flex-basis: 100%;
+  width: 100%;
+}
+
+.uu-ai-module-preview {
+  line-height: 1.55;
+}
+
+.uu-ai-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.uu-ai-generate {
+  min-width: 10rem;
+}
+
+.uu-ai-status {
+  flex: 1;
+  min-width: 12rem;
+}
+
+.uu-ai-error {
+  color: var(--fullred, #f46b6b);
+}
+
+.uu-ai-success {
+  color: var(--active, #65c987);
+}
+
+.uu-ai-results {
+  padding-top: 0.9rem;
+  border-top: 1px solid var(--SmartThemeBorderColor);
+}
+
+.uu-ai-result-meta {
+  margin: 0.35rem 0 0.75rem;
+}
+
+.uu-ai-result-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  max-height: 48vh;
+  overflow-y: auto;
+  padding-right: 0.25rem;
+}
+
+.uu-ai-result-card {
+  padding: 0.7rem 0.8rem;
+  border: 1px solid var(--SmartThemeBorderColor);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--SmartThemeQuoteColor) 8%, transparent);
+}
+
+.uu-ai-result-card h5 {
+  margin-bottom: 0.4rem;
+  font-size: 1rem;
+}
+
+.uu-ai-result-content {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  line-height: 1.55;
+}
+
+.uu-ai-apply-mode {
+  margin-top: 0.85rem !important;
+}
+
+.uu-ai-apply {
+  width: 100%;
+  margin-top: 0.75rem;
+}
+
 @media (max-width: 700px) {
   #uu-modular-persona-panel .uu-node-head {
     flex-wrap: wrap;
@@ -157,5 +347,18 @@
 
   #uu-modular-persona-panel .uu-name-input {
     flex-basis: calc(100% - 4.5rem);
+  }
+
+  .uu-ai-dialog {
+    width: calc(100vw - 1rem);
+    max-height: 94vh;
+  }
+
+  .uu-ai-shell {
+    max-height: 94vh;
+  }
+
+  .uu-ai-grid {
+    grid-template-columns: 1fr;
   }
 }

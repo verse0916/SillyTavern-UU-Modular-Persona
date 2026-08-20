@@ -13,6 +13,7 @@ import {
   replaceCurrentItems,
   saveSettings,
 } from "./store.js";
+import { openAiModuleDialog } from "./ai-ui.js";
 
 const PANEL_ID = "uu-modular-persona-panel";
 let renderQueued = false;
@@ -183,6 +184,7 @@ function buildPanel() {
         <div class="uu-toolbar">
           <button type="button" class="menu_button" data-action="add-module">＋ 模块</button>
           <button type="button" class="menu_button" data-action="add-branch">＋ 分支</button>
+          <button type="button" class="menu_button uu-ai-entry" data-action="ai-modules">✨ AI 自动分模块</button>
           <button type="button" class="menu_button" data-action="export">导出 JSON</button>
           <button type="button" class="menu_button" data-action="import">导入 JSON</button>
           <input class="uu-import-input" type="file" accept="application/json,.json" hidden>
@@ -205,7 +207,7 @@ function buildPanel() {
 
 function populatePanel(panel) {
   const personaId = getCurrentPersonaId();
-  panel.querySelector(".uu-persona-label").textContent = personaId ? `当前 Persona：${personaId}` : "请先选择一个 Persona";
+  panel.querySelector(".uu-persona-label").textContent = personaId ? "当前 Persona：已选择" : "请先选择一个 Persona";
   panel.querySelector('[data-setting="enabled"]').checked = getSettings().enabled;
   panel.querySelector('[data-setting="separator"]').value = getSettings().separator.replaceAll("\n", "\\n");
   const root = panel.querySelector("#uu-root-list");
@@ -305,6 +307,9 @@ function bindPanel(panel) {
       return;
     } else if (action === "import") {
       panel.querySelector(".uu-import-input").click();
+      return;
+    } else if (action === "ai-modules") {
+      openAiModuleDialog({ onApplied: () => scheduleRender() });
       return;
     } else if (action === "apply") {
       saveSettings();
