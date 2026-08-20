@@ -154,6 +154,52 @@ test("loose section parsing accepts inline labels, wrapped headings, tables, and
   ]);
 });
 
+test("common AI heading aliases stay in separate template modules", () => {
+  const modules = getTemplateModules("通用详细");
+  const parsed = parseNamedSections([
+    "### 基本信息",
+    "24 岁，中国籍。",
+    "### 身份与背景",
+    "* **原本专业：** 西方魔法专业",
+    "* **当前状态：** 在咒术高专进行交换。",
+    "---",
+    "### 外貌特征",
+    "黑色长发。",
+    "### 模型擅自增加的标题",
+    "这段内容不得进入外貌模块。",
+    "### 语言与表达",
+    "说话时经常保留讽刺措辞。",
+  ].join("\n"), modules).modules;
+
+  assert.equal(parsed.find((item) => item.name === "基本信息").content, "24 岁，中国籍。");
+  assert.equal(parsed.find((item) => item.name === "身份背景").content, [
+    "* **原本专业：** 西方魔法专业",
+    "* **当前状态：** 在咒术高专进行交换。",
+  ].join("\n"));
+  assert.equal(parsed.find((item) => item.name === "外貌").content, "黑色长发。");
+  assert.equal(parsed.find((item) => item.name === "语言风格").content, "说话时经常保留讽刺措辞。");
+  assert.doesNotMatch(parsed.find((item) => item.name === "外貌").content, /不得进入/);
+});
+
+test("exact extreme-template names take priority over aliases", () => {
+  const modules = getTemplateModules("极细分");
+  const parsed = parseNamedSections([
+    "### 身体特征",
+    "身高 175cm。",
+    "### 教育经历",
+    "就读咒术高专。",
+    "### 能力",
+    "擅长结界术。",
+    "### 隐藏信息",
+    "隐瞒了真实来历。",
+  ].join("\n"), modules).modules;
+
+  assert.equal(parsed.find((item) => item.name === "身体特征").content, "身高 175cm。");
+  assert.equal(parsed.find((item) => item.name === "教育经历").content, "就读咒术高专。");
+  assert.equal(parsed.find((item) => item.name === "能力").content, "擅长结界术。");
+  assert.equal(parsed.find((item) => item.name === "隐藏信息").content, "隐瞒了真实来历。");
+});
+
 test("JSON arrays and module-name maps are normalized as valid model output", () => {
   const modules = parseModuleDefinition("基本信息\n语言风格");
   const arrayResult = parseModelOutput(JSON.stringify([
@@ -218,6 +264,23 @@ test("plugin modules are root modules with fresh ids and enabled defaults", () =
     { type: "module", id: "m_test_1", name: "基本信息", content: "A", enabled: true, collapsed: false },
     { type: "module", id: "m_test_2", name: "语言风格", content: "B", enabled: true, collapsed: false },
   ]);
+});
+
+test("plugin module conversion skips empty classifications", () => {
+  let id = 0;
+  const items = toPluginModules([
+    { name: "基本信息", content: "A" },
+    { name: "身份背景", content: "   " },
+    { name: "外貌", content: "\n\t" },
+  ], () => `m_test_${++id}`);
+  assert.deepEqual(items, [
+    { type: "module", id: "m_test_1", name: "基本信息", content: "A", enabled: true, collapsed: false },
+  ]);
+  assert.equal(id, 1);
+  assert.throws(() => toPluginModules([
+    { name: "基本信息", content: "" },
+    { name: "身份背景", content: "  " },
+  ]), /返回内容为空/);
 });
 
 test("append preserves existing branches while replace returns only generated modules", () => {
