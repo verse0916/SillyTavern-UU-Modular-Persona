@@ -33,6 +33,31 @@ const BOUNDARY_HINTS = Object.freeze({
   "秘密与隐藏信息": "角色不会主动公开、但对理解角色或剧情有价值的信息。",
 });
 
+const MODULE_NAME_ALIASES = Object.freeze({
+  "基本信息": ["基础信息", "个人信息", "基本资料", "角色基本信息", "角色概况"],
+  "身份背景": ["身份与背景", "背景与身份", "身份设定", "背景设定", "人物背景", "角色背景"],
+  "外貌": ["外貌特征", "外貌描写", "外形特征", "外观", "外观特征", "身体特征"],
+  "童年经历": ["童年", "童年背景"],
+  "求学经历": ["教育经历", "教育背景", "学习经历", "求学与教育经历", "学业经历"],
+  "职业经历": ["工作经历", "职业背景", "工作背景"],
+  "重大事件": ["重要事件", "关键事件", "重大经历"],
+  "家庭关系": ["家庭", "家人关系", "家庭与亲属关系"],
+  "人际关系": ["社交关系", "人物关系", "社会关系", "人际与社会关系"],
+  "核心性格": ["性格", "性格特点", "性格特征", "核心人格"],
+  "心理特征": ["心理", "心理状态", "心理特点"],
+  "情绪模式": ["情绪", "情绪反应", "情感模式"],
+  "价值观": ["价值观念", "原则与底线", "核心价值观"],
+  "人生目标": ["目标", "人生愿望", "愿望与目标"],
+  "行为习惯": ["行为模式", "行为特点"],
+  "生活习惯": ["日常习惯", "生活方式", "日常生活"],
+  "兴趣爱好": ["兴趣与爱好", "爱好"],
+  "喜好与厌恶": ["喜恶", "偏好与厌恶", "喜欢与讨厌", "喜欢和讨厌"],
+  "能力与技能": ["能力技能", "能力和技能", "技能与能力", "能力"],
+  "语言风格": ["说话风格", "语言与表达", "表达风格", "语气风格"],
+  "与用户的关系": ["用户关系", "和用户的关系", "与user的关系", "与{{user}}的关系"],
+  "秘密与隐藏信息": ["秘密", "隐藏信息", "秘密信息", "秘密与隐情"],
+});
+
 function makeId() {
   if (globalThis.crypto?.randomUUID) return `m_${globalThis.crypto.randomUUID()}`;
   return `m_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 9)}`;
@@ -267,10 +292,39 @@ function cleanInlineContent(value) {
   return text;
 }
 
+function normalizeModuleLabel(value) {
+  return String(value ?? "")
+    .toLocaleLowerCase()
+    .replace(/[\s`*_#【】[\]「」『』“”"'：:、，,。.！!？?（）(){}]/g, "")
+    .replace(/[与和及的]/g, "");
+}
+
+function resolveModuleName(label, moduleNames) {
+  const text = String(label ?? "").trim();
+  if (moduleNames.includes(text)) return text;
+  const normalized = normalizeModuleLabel(text);
+  const normalizedExact = moduleNames.find((name) => normalizeModuleLabel(name) === normalized);
+  if (normalizedExact) return normalizedExact;
+  for (const name of moduleNames) {
+    const aliases = MODULE_NAME_ALIASES[name] ?? [];
+    if (aliases.some((alias) => normalizeModuleLabel(alias) === normalized)) return name;
+  }
+  return null;
+}
+
+function isUnrecognizedSectionBoundary(line) {
+  const text = String(line ?? "").trim();
+  if (/^#{1,6}\s+\S/.test(text)) return true;
+  if (/^(?:\d+\s*[.、)]\s*)?(?:\*\*|__)[^*_]+(?:\*\*|__)\s*[:：]?\s*$/.test(text)) return true;
+  if (/^[【[「『].+[】\]」』]\s*[:：]?\s*$/.test(text)) return true;
+  return false;
+}
+
 function matchModuleHeading(line, moduleNames) {
   const tableCells = String(line ?? "").trim().split("|").slice(1, -1).map((cell) => cell.trim());
-  if (tableCells.length >= 2 && moduleNames.includes(tableCells[0])) {
-    return { name: tableCells[0], inline: tableCells.slice(1).join(" | ") };
+  if (tableCells.length >= 2) {
+    const tableName = resolveModuleName(tableCells[0], moduleNames);
+    if (tableName) return { name: tableName, inline: tableCells.slice(1).join(" | ") };
   }
 
   let text = String(line ?? "").trim();
@@ -281,22 +335,29 @@ function matchModuleHeading(line, moduleNames) {
   text = text.replace(/^`|`$/g, "").trim();
 
   const quoted = text.match(/^["'](.+?)["']\s*[:：]\s*(.*)$/);
-  if (quoted && moduleNames.includes(quoted[1].trim())) {
-    return { name: quoted[1].trim(), inline: cleanInlineContent(quoted[2]) };
+  if (quoted) {
+    const quotedName = resolveModuleName(quoted[1], moduleNames);
+    if (quotedName) return { name: quotedName, inline: cleanInlineContent(quoted[2]) };
   }
 
   const wrappers = [["【", "】"], ["[", "]"], ["「", "」"], ["『", "』"]];
-  for (const name of moduleNames) {
-    if (text === name) return { name, inline: "" };
-    const label = text.match(new RegExp(`^${regexEscape(name)}\\s*[:：]\\s*(.*)$`));
-    if (label) return { name, inline: cleanInlineContent(label[1]) };
-    for (const [open, close] of wrappers) {
-      const prefix = `${open}${name}${close}`;
-      if (!text.startsWith(prefix)) continue;
-      const rest = text.slice(prefix.length).replace(/^\s*[:：]?\s*/, "");
-      return { name, inline: cleanInlineContent(rest) };
-    }
+  for (const [open, close] of wrappers) {
+    if (!text.startsWith(open)) continue;
+    const end = text.indexOf(close, open.length);
+    if (end < 0) continue;
+    const wrappedName = resolveModuleName(text.slice(open.length, end), moduleNames);
+    if (!wrappedName) continue;
+    const rest = text.slice(end + close.length).replace(/^\s*[:：]?\s*/, "");
+    return { name: wrappedName, inline: cleanInlineContent(rest) };
   }
+
+  const label = text.match(/^(.+?)\s*[:：]\s*(.*)$/);
+  if (label) {
+    const labelName = resolveModuleName(label[1], moduleNames);
+    if (labelName) return { name: labelName, inline: cleanInlineContent(label[2]) };
+  }
+  const exactName = resolveModuleName(text, moduleNames);
+  if (exactName) return { name: exactName, inline: "" };
   return null;
 }
 
@@ -314,6 +375,11 @@ export function parseNamedSections(raw, modules) {
       if (heading.inline) contentByName.get(currentName).push(heading.inline);
       continue;
     }
+    if (isUnrecognizedSectionBoundary(line)) {
+      currentName = null;
+      continue;
+    }
+    if (/^\s*(?:-{3,}|_{3,}|\*{3,})\s*$/.test(line)) continue;
     if (currentName) contentByName.get(currentName).push(line);
   }
 
@@ -386,7 +452,9 @@ export function normalizeResult(data, modules) {
 
 export function toPluginModules(modules, idFactory = makeId) {
   if (!Array.isArray(modules) || modules.length === 0) throw new Error("返回内容为空，没有可应用的模块。");
-  return modules.map((module) => ({
+  const nonEmptyModules = modules.filter((module) => String(module?.content ?? "").trim());
+  if (!nonEmptyModules.length) throw new Error("返回内容为空，没有可应用的模块。");
+  return nonEmptyModules.map((module) => ({
     type: "module",
     id: idFactory(),
     name: String(module?.name ?? "").trim() || "未命名模块",
